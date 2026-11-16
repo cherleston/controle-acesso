@@ -12,8 +12,8 @@ from googleapiclient.http import MediaIoBaseUpload
 st.set_page_config(page_title="Controle de Entrada e Saída", layout="centered")
 
 SCOPES = [
-    "https://googleapis.com" + "/auth/spreadsheets",
-    "https://googleapis.com" + "/auth/drive",
+    "https://www.googleapis.com" + "/auth/spreadsheets",
+    "https://www.googleapis.com" + "/auth/drive",
 ]
 
 @st.cache_resource
@@ -51,7 +51,7 @@ def upload_foto_drive(bytes_imagem, nome_arquivo, mime_type="image/jpeg"):
         fileId=file_id,
         body={"type": "anyone", "role": "reader"},
     ).execute()
-    return f"https://google.com{file_id}"
+    return "https://" + "drive.google.com" + f"/uc?export=view&id={file_id}"
 
 LOCAIS_DISPONIVEIS = [
     "Selecione o local...",
