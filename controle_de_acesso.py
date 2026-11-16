@@ -17,6 +17,7 @@ SCOPES = [
 @st.cache_resource
 def conectar_google():
     creds_dict = dict(st.secrets["gcp_service_account"])
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     cliente_sheets = gspread.authorize(creds)
     servico_drive = build("drive", "v3", credentials=creds)
