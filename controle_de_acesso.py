@@ -245,7 +245,7 @@ if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_widt
                 lista_bytes = list(st.session_state.fotos_webcam_temp)
                 if foto_cam is not None:
                     lista_bytes.append(foto_cam.getvalue())
-                               for i, img_bytes in enumerate(lista_bytes, start=1):
+                for i, img_bytes in enumerate(lista_bytes, start=1):
                     nome_arq = f"{cpf_limpo}_{timestamp}_cam{i}.jpg"
                     link = upload_foto_drive(img_bytes, nome_arq, "image/jpeg")
                     links_salvos.append(link)
