@@ -245,4 +245,99 @@ if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_widt
                 lista_bytes = list(st.session_state.fotos_webcam_temp)
                 if foto_cam is not None:
                     lista_bytes.append(foto_cam.getvalue())
-                for i, img_bytes in enumerate(lista_bytes):
+                               for i, img_bytes in enumerate(lista_bytes, start=1):
+                    nome_arq = f"{cpf_limpo}_{timestamp}_cam{i}.jpg"
+                    link = upload_foto_drive(img_bytes, nome_arq, "image/jpeg")
+                    links_salvos.append(link)
+
+            elif opcao_foto == "Fazer upload de arquivo(s)":
+                if novas_fotos_upload:
+                    for i, arq in enumerate(novas_fotos_upload, start=1):
+                        ext = arq.name.split(".")[-1].lower()
+                        mime = "image/png" if ext == "png" else "image/jpeg"
+                        nome_arq = f"{cpf_limpo}_{timestamp}_up{i}.{ext}"
+                        link = upload_foto_drive(arq.getvalue(), nome_arq, mime)
+                        links_salvos.append(link)
+
+            elif opcao_foto == "Manter foto anterior (se houver)" and st.session_state.get("foto_anterior"):
+                links_salvos.append(st.session_state.foto_anterior)
+
+            foto_final_str = " | ".join(links_salvos) if links_salvos else "Sem foto"
+            veiculo_final = veiculo_pessoa.strip() if veiculo_pessoa.strip() else "Não informado"
+
+            nova_linha = [
+                data_registro.strftime("%d/%m/%Y"),
+                hora_registro.strftime("%H:%M:%S"),
+                tipo_movimento,
+                nome_pessoa.strip(),
+                cpf_pessoa.strip(),
+                local_destino,
+                assunto_registro.strip(),
+                veiculo_final,
+                plantao,
+                matricula_op.strip(),
+                nome_op.strip(),
+                foto_final_str,
+            ]
+
+            aba_planilha.append_row(nova_linha)
+
+            st.session_state.fotos_webcam_temp = []
+            st.session_state.limpar_formulario = True
+            st.toast("✅ Registro salvo na nuvem com sucesso!", icon="✅")
+            st.rerun()
+
+st.divider()
+st.subheader("🔎 Histórico e Consulta de Registros Salvos")
+
+df_atual = carregar_dados()
+
+if not df_atual.empty:
+    col_pesq1, col_pesq2 = st.columns([2, 1])
+    with col_pesq1:
+        termo_pesquisa = st.text_input(
+            "Pesquisar por Nome, CPF, Placa, Local ou Assunto",
+            placeholder="Digite para filtrar..."
+        )
+    with col_pesq2:
+        st.write("")
+        filtrar_por_data = st.checkbox("Filtrar por data")
+        if filtrar_por_data:
+            data_pesquisa = st.date_input("Data", value=datetime.now().date(), key="data_pesq")
+
+    df_filtrado = df_atual.copy()
+
+    if filtrar_por_data:
+        df_filtrado = df_filtrado[df_filtrado["Data"] == data_pesquisa.strftime("%d/%m/%Y")]
+
+    if termo_pesquisa.strip():
+        termo = termo_pesquisa.strip().lower()
+        mascara = df_filtrado.apply(
+            lambda linha: linha.astype(str).str.lower().str.contains(termo, regex=False).any(),
+            axis=1
+        )
+        df_filtrado = df_filtrado[mascara]
+
+    st.write(f"**Registros encontrados:** {len(df_filtrado)}")
+    st.dataframe(df_filtrado.iloc[::-1], use_container_width=True)
+
+    if not df_filtrado.empty:
+        with st.expander("🖼️ Ver foto(s) de um registro localizado"):
+            opcoes_vis = [
+                f"{idx} - {row['Data']} {row['Hora']} | {row['Nome']} ({row['Movimentação']})"
+                for idx, row in df_filtrado.iloc[::-1].iterrows()
+            ]
+            selecionado = st.selectbox("Selecione o registro:", opcoes_vis)
+            idx_escolhido = int(selecionado.split(" - ")[0])
+            campo_fotos = str(df_filtrado.loc[idx_escolhido, "Arquivo Foto"]).strip()
+
+            if campo_fotos and campo_fotos != "Sem foto":
+                lista_links = [lnk.strip() for lnk in campo_fotos.split("|") if lnk.strip()]
+                cols_fotos = st.columns(min(len(lista_links), 3))
+                for idx_f, url_foto in enumerate(lista_links):
+                    with cols_fotos[idx_f % 3]:
+                        st.image(url_foto, caption=f"Foto {idx_f + 1}", use_container_width=True)
+            else:
+                st.info("Este registro não possui fotos anexadas.")
+else:
+    st.info("Nenhum registro encontrado na planilha até o momento.")
