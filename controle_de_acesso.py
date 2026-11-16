@@ -9,7 +9,6 @@ from googleapiclient.http import MediaIoBaseUpload
 
 st.set_page_config(page_title="Controle de Entrada e Saída", layout="centered")
 
-# --- CONEXÃO COM GOOGLE SHEETS E GOOGLE DRIVE ---
 SCOPES = [
     "https://googleapis.com",
     "https://googleapis.com",
@@ -37,22 +36,19 @@ def carregar_dados():
             "Assunto", "Veículo", "Plantão", "Matrícula Operador",
             "Nome Operador", "Arquivo Foto"
         ])
-    df = pd.DataFrame(registros).astype(str)
-    return df
+    return pd.DataFrame(registros).astype(str)
 
 def upload_foto_drive(bytes_imagem, nome_arquivo, mime_type="image/jpeg"):
     metadata = {"name": nome_arquivo, "parents": [ID_PASTA_DRIVE]}
     media = MediaIoBaseUpload(io.BytesIO(bytes_imagem), mimetype=mime_type, resumable=True)
     arquivo = servico_drive.files().create(body=metadata, media_body=media, fields="id").execute()
     file_id = arquivo.get("id")
-    # Torna a foto visível pelo link direto
     servico_drive.permissions().create(
         fileId=file_id,
         body={"type": "anyone", "role": "reader"},
     ).execute()
     return f"https://google.com{file_id}"
 
-# --- CONFIGURAÇÕES DA INTERFACE ---
 LOCAIS_DISPONIVEIS = [
     "Selecione o local...",
     "AGCMG/CHEADV - Chefia da Advocacia Setorial",
@@ -76,26 +72,20 @@ LOCAIS_DISPONIVEIS = [
     "Outro",
 ]
 
-if "nome_pessoa" not in st.session_state:
-    st.session_state.nome_pessoa = ""
-if "cpf_pessoa" not in st.session_state:
-    st.session_state.cpf_pessoa = ""
-if "veiculo_pessoa" not in st.session_state:
-    st.session_state.veiculo_pessoa = ""
-if "local_destino" not in st.session_state:
-    st.session_state.local_destino = LOCAIS_DISPONIVEIS[0]
-if "assunto_registro" not in st.session_state:
-    st.session_state.assunto_registro = ""
-if "fotos_anteriores" not in st.session_state:
-    st.session_state.fotos_anteriores = []
-if "fotos_webcam_temp" not in st.session_state:
-    st.session_state.fotos_webcam_temp = []
-if "uploader_key" not in st.session_state:
-    st.session_state.uploader_key = 0
-if "cam_key" not in st.session_state:
-    st.session_state.cam_key = 0
-if "limpar_formulario" not in st.session_state:
-    st.session_state.limpar_formulario = False
+for campo, valor_padrao in [
+    ("nome_pessoa", ""),
+    ("cpf_pessoa", ""),
+    ("veiculo_pessoa", ""),
+    ("local_destino", LOCAIS_DISPONIVEIS[0]),
+    ("assunto_registro", ""),
+    ("fotos_anteriores", []),
+    ("fotos_webcam_temp", []),
+    ("uploader_key", 0),
+    ("cam_key", 0),
+    ("limpar_formulario", False),
+]:
+    if campo not in st.session_state:
+        st.session_state[campo] = valor_padrao
 
 if st.session_state.limpar_formulario:
     st.session_state.nome_pessoa = ""
@@ -145,7 +135,6 @@ if btn_buscar:
             st.session_state.cpf_pessoa = ultimo["CPF"]
             v = str(ultimo.get("Veículo", ""))
             st.session_state.veiculo_pessoa = "" if v in ["Não informado", "nan", ""] else v
-
             links_str = str(ultimo.get("Arquivo Foto", ""))
             if links_str and links_str != "Sem foto":
                 st.session_state.fotos_anteriores = [l.strip() for l in links_str.split(" | ") if l.strip().startswith("http")]
@@ -245,3 +234,15 @@ st.divider()
 
 if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_width=True):
     if not matricula_op or not nome_op or not nome_pessoa or not cpf_pessoa or local_destino == "Selecione o local..." or not assunto_registro.strip():
+        st.error("Por favor, preencha todos os campos obrigatórios (Operador, Nome, CPF, Local e Assunto).")
+    else:
+        with st.spinner("Enviando dados e fotos para o Google Drive..."):
+            links_salvos = []
+            cpf_limpo = "".join(filter(str.isdigit, cpf_pessoa))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            if opcao_foto == "Tirar nova(s) foto(s) pela Webcam":
+                lista_bytes = list(st.session_state.fotos_webcam_temp)
+                if foto_cam is not None:
+                    lista_bytes.append(foto_cam.getvalue())
+                for i, img_bytes in enumerate(lista_bytes):
