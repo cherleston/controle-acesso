@@ -1,3 +1,5 @@
+import base64
+import json
 from datetime import datetime
 import io
 import pandas as pd
@@ -16,14 +18,15 @@ SCOPES = [
 
 @st.cache_resource
 def conectar_google():
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    json_bytes = base64.b64decode(st.secrets["GCP_JSON_BASE64"])
+    creds_dict = json.loads(json_bytes.decode("utf-8"))
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     cliente_sheets = gspread.authorize(creds)
     servico_drive = build("drive", "v3", credentials=creds)
     return cliente_sheets, servico_drive
 
 cliente_sheets, servico_drive = conectar_google()
+
 
 ID_PLANILHA = st.secrets["ID_PLANILHA"]
 ID_PASTA_DRIVE = st.secrets["ID_PASTA_DRIVE"]
