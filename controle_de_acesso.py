@@ -18,12 +18,12 @@ SCOPES = [
 
 @st.cache_resource
 def conectar_google():
-    json_bytes = base64.b64decode(st.secrets["GCP_JSON_BASE64"])
-    creds_dict = json.loads(json_bytes.decode("utf-8"))
+    creds_dict = json.loads(st.secrets["GCP_JSON"], strict=False)
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     cliente_sheets = gspread.authorize(creds)
     servico_drive = build("drive", "v3", credentials=creds)
     return cliente_sheets, servico_drive
+
 
 cliente_sheets, servico_drive = conectar_google()
 
