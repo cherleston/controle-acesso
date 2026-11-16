@@ -12,8 +12,8 @@ from googleapiclient.http import MediaIoBaseUpload
 st.set_page_config(page_title="Controle de Entrada e Saída", layout="centered")
 
 SCOPES = [
-    "https://googleapis.com",
-    "https://googleapis.com",
+    "https://googleapis.com" + "/auth/spreadsheets",
+    "https://googleapis.com" + "/auth/drive",
 ]
 
 @st.cache_resource
