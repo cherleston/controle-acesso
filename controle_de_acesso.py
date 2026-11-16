@@ -1,0 +1,247 @@
+from datetime import datetime
+import io
+import pandas as pd
+import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+
+st.set_page_config(page_title="Controle de Entrada e Saída", layout="centered")
+
+# --- CONEXÃO COM GOOGLE SHEETS E GOOGLE DRIVE ---
+SCOPES = [
+    "https://googleapis.com",
+    "https://googleapis.com",
+]
+
+@st.cache_resource
+def conectar_google():
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    cliente_sheets = gspread.authorize(creds)
+    servico_drive = build("drive", "v3", credentials=creds)
+    return cliente_sheets, servico_drive
+
+cliente_sheets, servico_drive = conectar_google()
+
+ID_PLANILHA = st.secrets["ID_PLANILHA"]
+ID_PASTA_DRIVE = st.secrets["ID_PASTA_DRIVE"]
+aba_planilha = cliente_sheets.open_by_key(ID_PLANILHA).sheet1
+
+def carregar_dados():
+    registros = aba_planilha.get_all_records()
+    if not registros:
+        return pd.DataFrame(columns=[
+            "Data", "Hora", "Movimentação", "Nome", "CPF", "Local",
+            "Assunto", "Veículo", "Plantão", "Matrícula Operador",
+            "Nome Operador", "Arquivo Foto"
+        ])
+    df = pd.DataFrame(registros).astype(str)
+    return df
+
+def upload_foto_drive(bytes_imagem, nome_arquivo, mime_type="image/jpeg"):
+    metadata = {"name": nome_arquivo, "parents": [ID_PASTA_DRIVE]}
+    media = MediaIoBaseUpload(io.BytesIO(bytes_imagem), mimetype=mime_type, resumable=True)
+    arquivo = servico_drive.files().create(body=metadata, media_body=media, fields="id").execute()
+    file_id = arquivo.get("id")
+    # Torna a foto visível pelo link direto
+    servico_drive.permissions().create(
+        fileId=file_id,
+        body={"type": "anyone", "role": "reader"},
+    ).execute()
+    return f"https://google.com{file_id}"
+
+# --- CONFIGURAÇÕES DA INTERFACE ---
+LOCAIS_DISPONIVEIS = [
+    "Selecione o local...",
+    "AGCMG/CHEADV - Chefia da Advocacia Setorial",
+    "AGCMG/CHEGAB - Chefia de Gabinete",
+    "AGCMG/DIRADM - Diretoria Administrativa",
+    "AGCMG/DIRCOP - Diretoria do Comando Operacional",
+    "AGCMG/DIRSDS - Diretoria do Sistema de Defesa Social",
+    "AGCMG/DIVCOM - Divisão de Comunicação Social",
+    "AGCMG/DSTAS - Divisão de Segurança do Trabalho e Assistência Social",
+    "AGCMG/GERADM - Gerência de Apoio Administrativo",
+    "AGCMG/GERCCO - Gerência da Central de Controle Operacional",
+    "AGCMG/GERFIN - Gerência de Finanças e Contabilidade",
+    "AGCMG/GERGDP - Gerência de Gestão e Desenvolvimento de Pessoas",
+    "AGCMG/GEROP - Gerência Operacional",
+    "AGCMG/GERPLA - Gerência de Planejamento",
+    "AGCMG/NIARME - Núcleo de Informação, Armamento e Estatística",
+    "AGCMG/NPS - Núcleo de Projetos",
+    "AGCMG/SECEXE - Secretaria Executiva",
+    "AGCMG/SECGER - Secretaria Geral",
+    "AGCMG/SETPAT - Setor de Material e Patrimônio",
+    "Outro",
+]
+
+if "nome_pessoa" not in st.session_state:
+    st.session_state.nome_pessoa = ""
+if "cpf_pessoa" not in st.session_state:
+    st.session_state.cpf_pessoa = ""
+if "veiculo_pessoa" not in st.session_state:
+    st.session_state.veiculo_pessoa = ""
+if "local_destino" not in st.session_state:
+    st.session_state.local_destino = LOCAIS_DISPONIVEIS[0]
+if "assunto_registro" not in st.session_state:
+    st.session_state.assunto_registro = ""
+if "fotos_anteriores" not in st.session_state:
+    st.session_state.fotos_anteriores = []
+if "fotos_webcam_temp" not in st.session_state:
+    st.session_state.fotos_webcam_temp = []
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
+if "cam_key" not in st.session_state:
+    st.session_state.cam_key = 0
+if "limpar_formulario" not in st.session_state:
+    st.session_state.limpar_formulario = False
+
+if st.session_state.limpar_formulario:
+    st.session_state.nome_pessoa = ""
+    st.session_state.cpf_pessoa = ""
+    st.session_state.veiculo_pessoa = ""
+    st.session_state.local_destino = LOCAIS_DISPONIVEIS[0]
+    st.session_state.assunto_registro = ""
+    st.session_state.fotos_anteriores = []
+    st.session_state.fotos_webcam_temp = []
+    st.session_state.uploader_key += 1
+    st.session_state.cam_key += 1
+    st.session_state.limpar_formulario = False
+
+st.title("📋 Controle de Entrada e Saída")
+
+st.subheader("1. Identificação do Plantão")
+col1, col2, col3 = st.columns(3)
+with col1:
+    plantao = st.selectbox("Plantão", ["24H-ALPHA", "24H-BRAVO", "24H-CHARLIE", "24H-DELTA"])
+with col2:
+    matricula_op = st.text_input("Matrícula do Operador")
+with col3:
+    nome_op = st.text_input("Nome do Operador")
+
+st.divider()
+
+st.subheader("2. Buscar Visitante Recorrente (Autopreenchimento)")
+col_busca1, col_busca2 = st.columns([3, 1])
+with col_busca1:
+    cpf_busca = st.text_input("Digite o CPF para puxar dados anteriores", placeholder="Ex: 12345678900")
+with col_busca2:
+    st.write("")
+    st.write("")
+    btn_buscar = st.button("🔍 Puxar Dados", use_container_width=True)
+
+df_historico = carregar_dados()
+
+if btn_buscar:
+    if not df_historico.empty and cpf_busca.strip() != "":
+        cpf_limpo_busca = "".join(filter(str.isdigit, cpf_busca))
+        df_historico["CPF_LIMPO"] = df_historico["CPF"].apply(lambda x: "".join(filter(str.isdigit, str(x))))
+        resultados = df_historico[df_historico["CPF_LIMPO"] == cpf_limpo_busca]
+
+        if not resultados.empty:
+            ultimo = resultados.iloc[-1]
+            st.session_state.nome_pessoa = ultimo["Nome"]
+            st.session_state.cpf_pessoa = ultimo["CPF"]
+            v = str(ultimo.get("Veículo", ""))
+            st.session_state.veiculo_pessoa = "" if v in ["Não informado", "nan", ""] else v
+
+            links_str = str(ultimo.get("Arquivo Foto", ""))
+            if links_str and links_str != "Sem foto":
+                st.session_state.fotos_anteriores = [l.strip() for l in links_str.split(" | ") if l.strip().startswith("http")]
+            else:
+                st.session_state.fotos_anteriores = []
+            st.rerun()
+        else:
+            st.warning("Nenhum registro encontrado para este CPF. Preencha abaixo.")
+            st.session_state.cpf_pessoa = cpf_busca
+            st.session_state.nome_pessoa = ""
+            st.session_state.veiculo_pessoa = ""
+            st.session_state.fotos_anteriores = []
+            st.rerun()
+    else:
+        st.warning("Base de dados vazia ou CPF não informado.")
+
+st.divider()
+
+st.subheader("3. Dados do Registro")
+tipo_movimento = st.radio("Tipo de Movimentação", ["Entrada", "Saída"], horizontal=True)
+
+col4, col5 = st.columns(2)
+with col4:
+    nome_pessoa = st.text_input("Nome Completo *", key="nome_pessoa")
+with col5:
+    cpf_pessoa = st.text_input("CPF *", key="cpf_pessoa")
+
+col_loc, col_ass = st.columns(2)
+with col_loc:
+    local_destino = st.selectbox("Local / Setor *", LOCAIS_DISPONIVEIS, key="local_destino")
+with col_ass:
+    assunto_registro = st.text_input("Assunto *", placeholder="Ex: Reunião, Entrega...", key="assunto_registro")
+
+veiculo_pessoa = st.text_input("Veículo - Placa / Modelo (Opcional)", placeholder="Ex: ABC-1234 / Gol Prata", key="veiculo_pessoa")
+
+agora = datetime.now()
+col6, col7 = st.columns(2)
+with col6:
+    data_registro = st.date_input("Data", value=agora.date())
+with col7:
+    hora_registro = st.time_input("Hora", value=agora.time())
+
+if st.session_state.fotos_anteriores:
+    st.info(f"📸 {len(st.session_state.fotos_anteriores)} foto(s) do cadastro anterior recuperada(s):")
+    cols_ant = st.columns(min(len(st.session_state.fotos_anteriores), 4))
+    for i, link_ant in enumerate(st.session_state.fotos_anteriores):
+        with cols_ant[i % 4]:
+            st.image(link_ant, width=150)
+
+st.write("**Registro Fotográfico Atual (Múltiplas Fotos)**")
+opcao_foto = st.radio(
+    "Como deseja proceder com as fotos?",
+    [
+        "Manter foto(s) anterior(es) (se houver)",
+        "Tirar nova(s) foto(s) pela Webcam",
+        "Fazer upload de arquivo(s)",
+    ],
+    horizontal=True,
+)
+
+foto_cam = None
+novas_fotos_upload = []
+
+if opcao_foto == "Tirar nova(s) foto(s) pela Webcam":
+    foto_cam = st.camera_input("Posicione e clique em 'Take Photo'", key=f"cam_{st.session_state.cam_key}")
+    col_cam1, col_cam2 = st.columns(2)
+    with col_cam1:
+        if foto_cam is not None:
+            if st.button("➕ Adicionar esta foto à lista", use_container_width=True):
+                st.session_state.fotos_webcam_temp.append(foto_cam.getvalue())
+                st.session_state.cam_key += 1
+                st.rerun()
+    with col_cam2:
+        if st.session_state.fotos_webcam_temp:
+            if st.button("🗑️ Limpar fotos tiradas", use_container_width=True):
+                st.session_state.fotos_webcam_temp = []
+                st.rerun()
+
+    if st.session_state.fotos_webcam_temp:
+        st.success(f"📷 {len(st.session_state.fotos_webcam_temp)} foto(s) pronta(s) para enviar:")
+        cols_w = st.columns(min(len(st.session_state.fotos_webcam_temp), 4))
+        for idx_w, img_bytes in enumerate(st.session_state.fotos_webcam_temp):
+            with cols_w[idx_w % 4]:
+                st.image(img_bytes, caption=f"Foto {idx_w + 1}", width=140)
+
+elif opcao_foto == "Fazer upload de arquivo(s)":
+    novas_fotos_upload = st.file_uploader(
+        "Escolha uma ou mais imagens",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True,
+        key=f"up_{st.session_state.uploader_key}",
+    )
+    if novas_fotos_upload:
+        st.success(f"📁 {len(novas_fotos_upload)} arquivo(s) selecionado(s).")
+
+st.divider()
+
+if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_width=True):
+    if not matricula_op or not nome_op or not nome_pessoa or not cpf_pessoa or local_destino == "Selecione o local..." or not assunto_registro.strip():
