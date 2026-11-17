@@ -356,7 +356,7 @@ if not df_atual.empty:
                 cols_fotos = st.columns(min(len(lista_links), 3))
                 for idx_f, url_foto in enumerate(lista_links):
                     with cols_fotos[idx_f % 3]:
-                        st.image(corrigir_link_foto(link_foto), caption=f"Foto {idx_f + 1}", use_container_width=True)
+                        st.image(corrigir_link_foto(url_foto), caption=f"Foto {idx_f + 1}", use_container_width=True)
             else:
                 st.info("Este registro não possui fotos anexadas.")
 else:
