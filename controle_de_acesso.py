@@ -1,6 +1,7 @@
 import base64
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import io
 import pandas as pd
 import streamlit as st
@@ -30,10 +31,10 @@ def conectar_google():
 
 cliente_sheets, servico_drive = conectar_google()
 
-
 ID_PLANILHA = st.secrets["ID_PLANILHA"]
 ID_PASTA_DRIVE = st.secrets["ID_PASTA_DRIVE"]
 aba_planilha = cliente_sheets.open_by_key(ID_PLANILHA).sheet1
+
 
 def carregar_dados():
     registros = aba_planilha.get_all_records()
@@ -44,6 +45,7 @@ def carregar_dados():
             "Nome Operador", "Arquivo Foto"
         ])
     return pd.DataFrame(registros).astype(str)
+
 
 def upload_foto_drive(bytes_imagem, nome_arquivo, mime_type="image/jpeg"):
     metadata = {"name": nome_arquivo, "parents": [ID_PASTA_DRIVE]}
@@ -69,6 +71,8 @@ def corrigir_link_foto(url):
         file_id = url.split("id=")[-1].split("&")[0]
         return "https://" + "drive.google.com" + f"/thumbnail?id={file_id}&sz=w800"
     return url
+
+
 LOCAIS_DISPONIVEIS = [
     "Selecione o local...",
     "AGCMG/CHEADV - Chefia da Advocacia Setorial",
@@ -148,7 +152,6 @@ if btn_buscar:
         cpf_limpo_busca = "".join(filter(str.isdigit, cpf_busca))
         df_historico["CPF_LIMPO"] = df_historico["CPF"].apply(lambda x: "".join(filter(str.isdigit, str(x))))
         resultados = df_historico[df_historico["CPF_LIMPO"] == cpf_limpo_busca]
-
         if not resultados.empty:
             ultimo = resultados.iloc[-1]
             st.session_state.nome_pessoa = ultimo["Nome"]
@@ -190,7 +193,7 @@ with col_ass:
 
 veiculo_pessoa = st.text_input("Veículo - Placa / Modelo (Opcional)", placeholder="Ex: ABC-1234 / Gol Prata", key="veiculo_pessoa")
 
-agora = datetime.now()
+agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
 col6, col7 = st.columns(2)
 with col6:
     data_registro = st.date_input("Data", value=agora.date())
@@ -232,7 +235,6 @@ if opcao_foto == "Tirar nova(s) foto(s) pela Webcam":
             if st.button("🗑️ Limpar fotos tiradas", use_container_width=True):
                 st.session_state.fotos_webcam_temp = []
                 st.rerun()
-
     if st.session_state.fotos_webcam_temp:
         st.success(f"📷 {len(st.session_state.fotos_webcam_temp)} foto(s) pronta(s) para enviar:")
         cols_w = st.columns(min(len(st.session_state.fotos_webcam_temp), 4))
@@ -259,7 +261,7 @@ if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_widt
         with st.spinner("Enviando dados e fotos para o Google Drive..."):
             links_salvos = []
             cpf_limpo = "".join(filter(str.isdigit, cpf_pessoa))
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y%m%d_%H%M%S")
 
             if opcao_foto == "Tirar nova(s) foto(s) pela Webcam":
                 lista_bytes = list(st.session_state.fotos_webcam_temp)
@@ -279,8 +281,8 @@ if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_widt
                         link = upload_foto_drive(arq.getvalue(), nome_arq, mime)
                         links_salvos.append(link)
 
-            elif opcao_foto == "Manter foto anterior (se houver)" and st.session_state.get("foto_anterior"):
-                links_salvos.append(st.session_state.foto_anterior)
+            elif opcao_foto == "Manter foto(s) anterior(es) (se houver)" and st.session_state.fotos_anteriores:
+                links_salvos.extend([corrigir_link_foto(l) for l in st.session_state.fotos_anteriores])
 
             foto_final_str = " | ".join(links_salvos) if links_salvos else "Sem foto"
             veiculo_final = veiculo_pessoa.strip() if veiculo_pessoa.strip() else "Não informado"
@@ -299,17 +301,15 @@ if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_widt
                 nome_op.strip(),
                 foto_final_str,
             ]
-
             aba_planilha.append_row(nova_linha)
-
             st.session_state.fotos_webcam_temp = []
             st.session_state.limpar_formulario = True
             st.toast("✅ Registro salvo na nuvem com sucesso!", icon="✅")
             st.rerun()
 
 st.divider()
-st.subheader("🔎 Histórico e Consulta de Registros Salvos")
 
+st.subheader("🔎 Histórico e Consulta de Registros Salvos")
 df_atual = carregar_dados()
 
 if not df_atual.empty:
@@ -323,10 +323,9 @@ if not df_atual.empty:
         st.write("")
         filtrar_por_data = st.checkbox("Filtrar por data")
         if filtrar_por_data:
-            data_pesquisa = st.date_input("Data", value=datetime.now().date(), key="data_pesq")
+            data_pesquisa = st.date_input("Data", value=datetime.now(ZoneInfo("America/Sao_Paulo")).date(), key="data_pesq")
 
     df_filtrado = df_atual.copy()
-
     if filtrar_por_data:
         df_filtrado = df_filtrado[df_filtrado["Data"] == data_pesquisa.strftime("%d/%m/%Y")]
 
@@ -361,3 +360,4 @@ if not df_atual.empty:
                 st.info("Este registro não possui fotos anexadas.")
 else:
     st.info("Nenhum registro encontrado na planilha até o momento.")
+
