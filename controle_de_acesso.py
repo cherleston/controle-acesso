@@ -5,23 +5,26 @@ import io
 import pandas as pd
 import streamlit as st
 import gspread
-from google.oauth2.service_account import Credentials
+from google.oauth2.service_account import Credentials as ServiceCredentials
+from google.oauth2.credentials import Credentials as UserCredentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 st.set_page_config(page_title="Controle de Entrada e Saída", layout="centered")
 
-SCOPES = [
-    "https://www.googleapis.com" + "/auth/spreadsheets",
-    "https://www.googleapis.com" + "/auth/drive",
-]
+SCOPES_SHEETS = ["https://www.googleapis.com" + "/auth/spreadsheets"]
+SCOPES_DRIVE = ["https://www.googleapis.com" + "/auth/drive.file"]
 
 @st.cache_resource
 def conectar_google():
-    creds_dict = json.loads(st.secrets["GCP_JSON"], strict=False)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    cliente_sheets = gspread.authorize(creds)
-    servico_drive = build("drive", "v3", credentials=creds)
+    creds_sheets_dict = json.loads(st.secrets["GCP_JSON"], strict=False)
+    creds_sheets = ServiceCredentials.from_service_account_info(creds_sheets_dict, scopes=SCOPES_SHEETS)
+    cliente_sheets = gspread.authorize(creds_sheets)
+
+    creds_drive_dict = json.loads(st.secrets["TOKEN_DRIVE_JSON"], strict=False)
+    creds_drive = UserCredentials.from_authorized_user_info(creds_drive_dict, scopes=SCOPES_DRIVE)
+    servico_drive = build("drive", "v3", credentials=creds_drive)
+
     return cliente_sheets, servico_drive
 
 
