@@ -45,7 +45,7 @@ def carregar_dados():
 def upload_foto_drive(bytes_imagem, nome_arquivo, mime_type="image/jpeg"):
     metadata = {"name": nome_arquivo, "parents": [ID_PASTA_DRIVE]}
     media = MediaIoBaseUpload(io.BytesIO(bytes_imagem), mimetype=mime_type, resumable=True)
-    arquivo = servico_drive.files().create(body=metadata, media_body=media, fields="id").execute()
+    arquivo = servico_drive.files().create(body=metadata, media_body=media, fields="id",supportsAllDrives=True).execute()
     file_id = arquivo.get("id")
     servico_drive.permissions().create(
         fileId=file_id,
