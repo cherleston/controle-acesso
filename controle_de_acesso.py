@@ -48,14 +48,27 @@ def carregar_dados():
 def upload_foto_drive(bytes_imagem, nome_arquivo, mime_type="image/jpeg"):
     metadata = {"name": nome_arquivo, "parents": [ID_PASTA_DRIVE]}
     media = MediaIoBaseUpload(io.BytesIO(bytes_imagem), mimetype=mime_type, resumable=True)
-    arquivo = servico_drive.files().create(body=metadata, media_body=media, fields="id",supportsAllDrives=True).execute()
+    arquivo = servico_drive.files().create(
+        body=metadata,
+        media_body=media,
+        fields="id",
+        supportsAllDrives=True
+    ).execute()
     file_id = arquivo.get("id")
     servico_drive.permissions().create(
         fileId=file_id,
         body={"type": "anyone", "role": "reader"},
+        supportsAllDrives=True
     ).execute()
-    return "https://" + "drive.google.com" + f"/uc?export=view&id={file_id}"
+    return "https://" + "drive.google.com" + f"/thumbnail?id={file_id}&sz=w800"
 
+
+def corrigir_link_foto(url):
+    url = str(url).strip()
+    if "drive.google.com" in url and "id=" in url:
+        file_id = url.split("id=")[-1].split("&")[0]
+        return "https://" + "drive.google.com" + f"/thumbnail?id={file_id}&sz=w800"
+    return url
 LOCAIS_DISPONIVEIS = [
     "Selecione o local...",
     "AGCMG/CHEADV - Chefia da Advocacia Setorial",
@@ -189,7 +202,7 @@ if st.session_state.fotos_anteriores:
     cols_ant = st.columns(min(len(st.session_state.fotos_anteriores), 4))
     for i, link_ant in enumerate(st.session_state.fotos_anteriores):
         with cols_ant[i % 4]:
-            st.image(link_ant, width=150)
+            st.image(corrigir_link_foto(link_ant), width=150)
 
 st.write("**Registro Fotográfico Atual (Múltiplas Fotos)**")
 opcao_foto = st.radio(
@@ -343,7 +356,7 @@ if not df_atual.empty:
                 cols_fotos = st.columns(min(len(lista_links), 3))
                 for idx_f, url_foto in enumerate(lista_links):
                     with cols_fotos[idx_f % 3]:
-                        st.image(url_foto, caption=f"Foto {idx_f + 1}", use_container_width=True)
+                        st.image(corrigir_link_foto(link_foto), caption=f"Foto {idx_f + 1}", use_container_width=True)
             else:
                 st.info("Este registro não possui fotos anexadas.")
 else:
