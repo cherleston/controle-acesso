@@ -35,7 +35,7 @@ ID_PLANILHA = st.secrets["ID_PLANILHA"]
 ID_PASTA_DRIVE = st.secrets["ID_PASTA_DRIVE"]
 aba_planilha = cliente_sheets.open_by_key(ID_PLANILHA).sheet1
 
-
+@st.cache_data(ttl=60)
 def carregar_dados():
     registros = aba_planilha.get_all_records()
     if not registros:
@@ -302,6 +302,7 @@ if st.button("💾 Salvar Registro na Nuvem", type="primary", use_container_widt
                 foto_final_str,
             ]
             aba_planilha.append_row(nova_linha)
+            st.cache_data.clear()
             st.session_state.fotos_webcam_temp = []
             st.session_state.limpar_formulario = True
             st.toast("✅ Registro salvo na nuvem com sucesso!", icon="✅")
